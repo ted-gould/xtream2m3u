@@ -8,7 +8,6 @@ import socket
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import lru_cache
 
 import dns.resolver
 import requests
@@ -92,29 +91,17 @@ def setup_custom_dns():
 setup_custom_dns()
 
 
-# Create a session with connection pooling for better performance
-session = requests.Session()
-session.mount('http://', requests.adapters.HTTPAdapter(
-    pool_connections=10,
-    pool_maxsize=20,
-    max_retries=3
-))
-session.mount('https://', requests.adapters.HTTPAdapter(
-    pool_connections=10,
-    pool_maxsize=20,
-    max_retries=3
-))
+# No persistent connections - fresh connection for each request to avoid stale connection issues
 
-# Common request function with caching for API endpoints
-@lru_cache(maxsize=128)
+# Common request function for API endpoints
 def fetch_api_data(url, timeout=10):
-    """Make a request to an API endpoint with caching"""
+    """Make a request to an API endpoint"""
     ua = UserAgent()
     headers = {
         "User-Agent": ua.chrome,
         "Accept": "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
-        "Connection": "keep-alive",
+        "Connection": "close",
         "Accept-Encoding": "gzip, deflate",
     }
 
@@ -122,8 +109,8 @@ def fetch_api_data(url, timeout=10):
         hostname = urllib.parse.urlparse(url).netloc.split(":")[0]
         logger.info(f"Making request to host: {hostname}")
 
-        # Use session for connection pooling with streaming for large responses
-        response = session.get(url, headers=headers, timeout=timeout, stream=True)
+        # Use fresh connection for each request to avoid stale connection issues
+        response = requests.get(url, headers=headers, timeout=timeout, stream=True)
         response.raise_for_status()
 
         # For large responses, use streaming JSON parsing
