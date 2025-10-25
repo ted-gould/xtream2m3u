@@ -7,6 +7,7 @@ import re
 import socket
 import time
 import urllib.parse
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import dns.resolver
@@ -780,4 +781,10 @@ def generate_m3u():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    parser = argparse.ArgumentParser(description="Run the Flask app.")
+    parser.add_argument(
+        "--port", type=int, default=5000, help="Port number to run the app on"
+    )
+    args = parser.parse_args()
+
+    app.run(debug=True, host="0.0.0.0", port=args.port)
