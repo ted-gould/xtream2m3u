@@ -1,0 +1,250 @@
+"""M3U playlist generation service"""
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from app.services.xtream_api import fetch_series_episodes
+from app.utils import encode_url, group_matches
+
+logger = logging.getLogger(__name__)
+
+
+def generate_m3u_playlist(
+    url,
+    username,
+    password,
+    server_url,
+    categories,
+    streams,
+    wanted_groups=None,
+    unwanted_groups=None,
+    no_stream_proxy=False,
+    include_vod=False,
+    include_channel_id=False,
+    channel_id_tag="channel-id",
+    proxy_url=None
+):
+    """
+    Generate an M3U playlist from Xtream API data
+
+    Args:
+        url: Xtream API base URL
+        username: Xtream API username
+        password: Xtream API password
+        server_url: Server URL for streaming
+        categories: List of categories
+        streams: List of streams
+        wanted_groups: List of group patterns to include (optional)
+        unwanted_groups: List of group patterns to exclude (optional)
+        no_stream_proxy: Whether to disable stream proxying
+        include_vod: Whether VOD content is included
+        include_channel_id: Whether to include channel IDs
+        channel_id_tag: Tag name for channel IDs
+        proxy_url: Proxy URL for images and streams
+
+    Returns:
+        M3U playlist string
+    """
+    # Create category name lookup
+    category_names = {cat["category_id"]: cat["category_name"] for cat in categories}
+
+    # Log all available groups
+    all_groups = set(category_names.values())
+    logger.info(f"All available groups: {sorted(all_groups)}")
+
+    # Generate M3U playlist
+    m3u_playlist = "#EXTM3U\n"
+
+    # Track included groups
+    included_groups = set()
+    processed_streams = 0
+    total_streams = len(streams)
+
+    # Pre-compile filter patterns for massive filter lists (performance optimization)
+    wanted_patterns = [pattern.lower() for pattern in wanted_groups] if wanted_groups else []
+    unwanted_patterns = [pattern.lower() for pattern in unwanted_groups] if unwanted_groups else []
+
+    logger.info(f"🔍 Starting to filter {total_streams} streams...")
+    batch_size = 10000  # Process streams in batches for better performance
+
+    # Filter series to fetch episodes for (optimization to avoid fetching episodes for excluded series)
+    series_episodes_map = {}
+    if include_vod:
+        series_streams = [s for s in streams if s.get("content_type") == "series"]
+        if series_streams:
+            logger.info(f"Found {len(series_streams)} series. Filtering to determine which need episodes...")
+
+            series_to_fetch = []
+            for stream in series_streams:
+                # Get raw category name for filtering
+                category_name = category_names.get(stream.get('category_id'), 'Uncategorized')
+
+                # Calculate group_title (prefixed)
+                group_title = f"Series - {category_name}"
+
+                # Check filter against both raw category name and prefixed name
+                # This ensures we match "Action" (raw) AND "Series - Action" (prefixed)
+                should_fetch = True
+                if wanted_patterns:
+                    should_fetch = any(
+                        group_matches(category_name, w) or group_matches(group_title, w)
+                        for w in wanted_groups
+                    )
+                elif unwanted_patterns:
+                    should_fetch = not any(
+                        group_matches(category_name, u) or group_matches(group_title, u)
+                        for u in unwanted_groups
+                    )
+
+                if should_fetch:
+                    series_to_fetch.append(stream)
+
+            if series_to_fetch:
+                logger.info(f"Fetching episodes for {len(series_to_fetch)} series (this might take a while)...")
+
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    future_to_series = {
+                        executor.submit(fetch_series_episodes, url, username, password, s.get("series_id")): s.get("series_id")
+                        for s in series_to_fetch
+                    }
+
+                    completed_fetches = 0
+                    for future in as_completed(future_to_series):
+                        s_id, episodes = future.result()
+                        if episodes:
+                            series_episodes_map[s_id] = episodes
+
+                        completed_fetches += 1
+                        if completed_fetches % 50 == 0:
+                            logger.info(f"  Fetched episodes for {completed_fetches}/{len(series_to_fetch)} series")
+
+                logger.info(f"✅ Fetched episodes for {len(series_episodes_map)} series")
+
+    for stream in streams:
+        content_type = stream.get("content_type", "live")
+
+        # Get raw category name
+        category_name = category_names.get(stream.get("category_id"), "Uncategorized")
+
+        # Determine group title based on content type
+        if content_type == "series":
+            # For series, use series name as group title
+            group_title = f"Series - {category_name}"
+            stream_name = stream.get("name", "Unknown Series")
+        else:
+            # For live and VOD content
+            group_title = category_name
+            stream_name = stream.get("name", "Unknown")
+
+            # Add content type prefix for VOD
+            if content_type == "vod":
+                group_title = f"VOD - {category_name}"
+
+        # Optimized filtering logic using pre-compiled patterns
+        include_stream = True
+
+        if wanted_patterns:
+            # Only include streams from specified groups (optimized matching)
+            # Check both raw category name and final group title to support flexible filtering
+            include_stream = any(
+                group_matches(category_name, wanted_group) or group_matches(group_title, wanted_group)
+                for wanted_group in wanted_groups
+            )
+        elif unwanted_patterns:
+            # Exclude streams from unwanted groups (optimized matching)
+            include_stream = not any(
+                group_matches(category_name, unwanted_group) or group_matches(group_title, unwanted_group)
+                for unwanted_group in unwanted_groups
+            )
+
+        processed_streams += 1
+
+        # Progress logging for large datasets
+        if processed_streams % batch_size == 0:
+            logger.info(f"  📊 Processed {processed_streams}/{total_streams} streams ({(processed_streams/total_streams)*100:.1f}%)")
+
+        if include_stream:
+            included_groups.add(group_title)
+
+            tags = [
+                f'tvg-name="{stream_name}"',
+                f'group-title="{group_title}"',
+            ]
+
+            # Handle logo URL - proxy only if stream proxying is enabled
+            original_logo = stream.get("stream_icon", "")
+            if original_logo and not no_stream_proxy:
+                logo_url = f"{proxy_url}/image-proxy/{encode_url(original_logo)}"
+            else:
+                logo_url = original_logo
+            tags.append(f'tvg-logo="{logo_url}"')
+
+            # Handle channel id if enabled
+            if include_channel_id:
+                channel_id = stream.get("epg_channel_id")
+                if channel_id:
+                    tags.append(f'{channel_id_tag}="{channel_id}"')
+
+            # Create the stream URL based on content type
+            if content_type == "live":
+                # Live TV streams
+                stream_url = f"{server_url}/live/{username}/{password}/{stream['stream_id']}.ts"
+            elif content_type == "vod":
+                # VOD streams
+                stream_url = f"{server_url}/movie/{username}/{password}/{stream['stream_id']}.{stream.get('container_extension', 'mp4')}"
+            elif content_type == "series":
+                # Series streams - check if we have episodes
+                episodes_data = series_episodes_map.get(stream.get("series_id"))
+
+                if episodes_data:
+                    # Sort seasons numerically if possible
+                    try:
+                        sorted_seasons = sorted(episodes_data.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 999)
+                    except:
+                        sorted_seasons = episodes_data.items()
+
+                    for season_num, episodes in sorted_seasons:
+                        for episode in episodes:
+                            episode_id = episode.get("id")
+                            episode_num = episode.get("episode_num")
+                            episode_title = episode.get("title")
+                            container_ext = episode.get("container_extension", "mp4")
+
+                            # Format title: Series Name - S01E01 - Episode Title
+                            full_title = f"{stream_name} - S{str(season_num).zfill(2)}E{str(episode_num).zfill(2)} - {episode_title}"
+
+                            # Build stream URL for episode
+                            ep_stream_url = f"{server_url}/series/{username}/{password}/{episode_id}.{container_ext}"
+
+                            # Apply stream proxying if enabled
+                            if not no_stream_proxy:
+                                ep_stream_url = f"{proxy_url}/stream-proxy/{encode_url(ep_stream_url)}"
+
+                            # Add to playlist
+                            m3u_playlist += (
+                                f'#EXTINF:0 {" ".join(tags)},{full_title}\n'
+                            )
+                            m3u_playlist += f"{ep_stream_url}\n"
+
+                    # Continue to next stream as we've added all episodes
+                    continue
+                else:
+                    # Fallback for series without episode data
+                    series_id = stream.get("series_id", stream.get("stream_id", ""))
+                    stream_url = f"{server_url}/series/{username}/{password}/{series_id}.mp4"
+
+            # Apply stream proxying if enabled (for non-series, or series fallback)
+            if not no_stream_proxy:
+                stream_url = f"{proxy_url}/stream-proxy/{encode_url(stream_url)}"
+
+            # Add stream to playlist
+            m3u_playlist += (
+                f'#EXTINF:0 {" ".join(tags)},{stream_name}\n'
+            )
+            m3u_playlist += f"{stream_url}\n"
+
+    # Log included groups after filtering
+    logger.info(f"Groups included after filtering: {sorted(included_groups)}")
+    logger.info(f"Groups excluded after filtering: {sorted(all_groups - included_groups)}")
+    logger.info(f"✅ M3U generation complete! Generated playlist with {len(included_groups)} groups")
+
+    return m3u_playlist

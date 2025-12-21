@@ -11,11 +11,12 @@
 
 <p align="center">
   <a href="#about">About</a> •
+  <a href="#features">Features</a> •
   <a href="#prerequisites">Prerequisites</a> •
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
-  <a href="#license">License</a> •
-  <a href="#disclaimer">Disclaimer</a>
+  <a href="#api-documentation">API</a> •
+  <a href="#license">License</a>
 </p>
 
 <p align="center">
@@ -32,169 +33,141 @@
 
 ## About
 
-xtream2m3u is a powerful and flexible tool designed to bridge the gap between Xtream API-based IPTV services and M3U playlist-compatible media players. It provides a simple API that fetches live streams from Xtream IPTV services, filters out unwanted channel groups, and generates a customized M3U playlist file.
+**xtream2m3u** is a powerful and flexible tool designed to bridge the gap between Xtream API-based IPTV services and M3U playlist-compatible media players. It offers a **user-friendly web interface** and a **comprehensive API** to generate customized playlists.
 
-### Why xtream2m3u?
+Many IPTV providers use the Xtream API, which isn't directly compatible with all players. xtream2m3u allows you to:
+1.  Connect to your Xtream IPTV provider.
+2.  Select exactly which channel groups (Live TV) or VOD categories (Movies/Series) you want.
+3.  Generate a standard M3U playlist compatible with almost any player (VLC, TiviMate, Televizo, etc.).
 
-Many IPTV providers use the Xtream API, which isn't directly compatible with media players that accept M3U playlists. xtream2m3u solves this problem by:
+## Features
 
-1. Connecting to Xtream API-based IPTV services
-2. Fetching the list of available live streams
-3. Allowing users to filter channels by including only wanted groups or excluding unwanted groups
-4. Generating a standard M3U playlist that's compatible with a wide range of media players
+*   **Web Interface:** Easy-to-use UI for managing credentials and selecting categories.
+*   **Custom Playlists:** Filter channels by including or excluding specific groups.
+*   **VOD Support:** Optionally include Movies and Series in your playlist.
+*   **Stream Proxying:** built-in proxy to handle CORS issues or hide upstream URLs.
+*   **Custom DNS:** Uses reliable DNS resolvers (Cloudflare, Google) to ensure connection stability.
+*   **XMLTV EPG:** Generates a compatible XMLTV guide for your playlist.
+*   **Docker Ready:** Simple deployment with Docker and Docker Compose.
 
 ## Prerequisites
 
 To use xtream2m3u, you'll need:
+*   An active subscription to an IPTV service that uses the Xtream API.
 
-- An active subscription to an IPTV service that uses the Xtream API
-
-For deployment, you'll need one of the following:
-
-- Docker and Docker Compose
-- Python 3.12 or higher
-
-## Environment Variables
-
-The application supports the following environment variables:
-
-- `PROXY_URL`: [Optional] Set a default custom base URL for all proxied content (can be overridden with the `proxy_url` parameter)
+For deployment:
+*   **Docker & Docker Compose** (Recommended)
+*   OR **Python 3.9+**
 
 ## Installation
 
 ### Using Docker (Recommended)
 
-1. Install Docker and Docker Compose
-2. Clone the repository:
-   ```
-   git clone https://github.com/ovosimpatico/xtream2m3u.git
-   cd xtream2m3u
-   ```
-3. Run the application:
-   ```
-   docker-compose up -d
-   ```
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/ovosimpatico/xtream2m3u.git
+    cd xtream2m3u
+    ```
+2.  Run the application:
+    ```bash
+    docker-compose up -d
+    ```
+3.  Open your browser and navigate to `http://localhost:5000`.
 
 ### Native Python Installation
 
-1. Install Python (3.9 or higher)
-2. Clone the repository:
-   ```
-   git clone https://github.com/ovosimpatico/xtream2m3u.git
-   cd xtream2m3u
-   ```
-3. Create a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-   ```
-4. Install the required packages:
-   ```
-   pip install -r requirements.txt
-   ```
-5. Run the application:
-   ```
-   python run.py
-   ```
+1.  Clone the repository and enter the directory:
+    ```bash
+    git clone https://github.com/ovosimpatico/xtream2m3u.git
+    cd xtream2m3u
+    ```
+2.  Create and activate a virtual environment:
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+3.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  Run the server:
+    ```bash
+    python run.py
+    ```
+5.  Open your browser and navigate to `http://localhost:5000`.
 
 ## Usage
 
-### API Endpoints
+### Web Interface
+The easiest way to use xtream2m3u is via the web interface at `http://localhost:5000`.
+1.  **Enter Credentials:** Input your IPTV provider's URL, username, and password.
+2.  **Select Content:** Choose whether to include VOD (Movies & Series).
+3.  **Filter Categories:** Load categories and select which ones to include or exclude.
+4.  **Generate:** Click "Generate Playlist" to download your custom M3U file.
 
-The application provides several endpoints for generating playlists and proxying media:
+### Environment Variables
+*   `PROXY_URL`: [Optional] Set a custom base URL for proxied content (useful if running behind a reverse proxy).
+*   `PORT`: [Optional] Port to run the server on (default: 5000).
 
-#### M3U Playlist Generation
+## API Documentation
 
+For advanced users or automation, you can use the API endpoints directly.
+
+### 1. Generate M3U Playlist
+`GET /m3u` or `POST /m3u`
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `url` | string | Yes | IPTV Service URL |
+| `username` | string | Yes | IPTV Username |
+| `password` | string | Yes | IPTV Password |
+| `unwanted_groups` | string | No | Comma-separated list of groups to **exclude** |
+| `wanted_groups` | string | No | Comma-separated list of groups to **include** (takes precedence) |
+| `include_vod` | boolean | No | Set `true` to include Movies & Series (default: `false`) |
+| `nostreamproxy` | boolean | No | Set `true` to disable stream proxying (direct links) |
+| `proxy_url` | string | No | Custom base URL for proxied streams |
+| `include_channel_id` | boolean | No | Set `true` to include `epg_channel_id` tag |
+| `channel_id_tag` | string | No | Custom tag name for channel ID (default: `channel-id`) |
+
+**Wildcard Support:** `unwanted_groups` and `wanted_groups` support `*` (wildcard) and `?` (single char).
+*   Example: `*Sports*` matches "Sky Sports", "BeIN Sports", etc.
+
+**Example:**
 ```
-GET /m3u
-```
-
-##### Query Parameters
-
-- `url` (required): The base URL of your IPTV service
-- `username` (required): Your IPTV service username
-- `password` (required): Your IPTV service password
-- `unwanted_groups` (optional): A comma-separated list of group names to exclude
-- `wanted_groups` (optional): A comma-separated list of group names to include (takes precedence over unwanted_groups)
-- `nostreamproxy` (optional): Set to 'true' to disable stream proxying
-- `proxy_url` (optional): Custom base URL for proxied content (overrides auto-detection)
-- `include_channel_id` (optional): Set to 'true' to include `epg_channel_id` in M3U, useful for [Channels](https://getchannels.com)
-- `channel_id_tag` (optional): Name of the tag to use for `epg_channel_id` data in M3U, defaults to `channel-id`
-
-Note: For `unwanted_groups` and `wanted_groups`, you can use wildcard patterns with `*` and `?` characters. For example:
-- `US*` will match all groups starting with "US"
-- `*Sports*` will match any group containing "Sports"
-- `US| ?/?/?` will match groups like "US| 24/7"
-
-##### Example Request
-
-```
-http://localhost:5000/m3u?url=http://your-iptv-service.com&username=your_username&password=your_password&unwanted_groups=news,sports
-```
-
-Or to only include specific groups:
-
-```
-http://localhost:5000/m3u?url=http://your-iptv-service.com&username=your_username&password=your_password&wanted_groups=movies,series
-```
-
-With a custom proxy URL:
-
-```
-http://localhost:5000/m3u?url=http://your-iptv-service.com&username=your_username&password=your_password&proxy_url=https://your-public-domain.com
+http://localhost:5000/m3u?url=http://iptv.com&username=user&password=pass&wanted_groups=Sports*,News&include_vod=true
 ```
 
-#### XMLTV Guide Generation
+### 2. Generate XMLTV Guide
+`GET /xmltv`
 
-```
-GET /xmltv
-```
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `url` | string | Yes | IPTV Service URL |
+| `username` | string | Yes | IPTV Username |
+| `password` | string | Yes | IPTV Password |
+| `proxy_url` | string | No | Custom base URL for proxied images |
 
-##### Query Parameters
+### 3. Get Categories
+`GET /categories`
 
-- `url` (required): The base URL of your IPTV service
-- `username` (required): Your IPTV service username
-- `password` (required): Your IPTV service password
-- `proxy_url` (optional): Custom base URL for proxied content (overrides auto-detection)
+Returns a JSON list of all available categories.
 
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `url` | string | Yes | IPTV Service URL |
+| `username` | string | Yes | IPTV Username |
+| `password` | string | Yes | IPTV Password |
+| `include_vod` | boolean | No | Set `true` to include VOD categories |
 
-##### Example Request
-
-```
-http://localhost:5000/xmltv?url=http://your-iptv-service.com&username=your_username&password=your_password
-```
-
-With a custom proxy URL:
-
-```
-http://localhost:5000/xmltv?url=http://your-iptv-service.com&username=your_username&password=your_password&proxy_url=https://your-public-domain.com
-```
-
-#### Image Proxy
-
-```
-GET /image-proxy/<encoded_image_url>
-```
-
-Proxies image requests, like channel logos and EPG images.
-
-#### Stream Proxy
-
-```
-GET /stream-proxy/<encoded_stream_url>
-```
-
-Proxies video streams. Supports the following formats:
-- MPEG-TS (.ts)
-- HLS (.m3u8)
-- Generic video streams
+### 4. Proxy Endpoints
+*   `GET /image-proxy/<encoded_url>`: Proxies images (logos, covers).
+*   `GET /stream-proxy/<encoded_url>`: Proxies video streams.
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3). This license requires that any modifications to the code must also be made available under the same license, even when the software is run as a service (e.g., over a network). See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**.
+See the [LICENSE](LICENSE) file for details.
 
 ## Disclaimer
 
-xtream2m3u is a tool for generating M3U playlists from Xtream API-based IPTV services but does not provide IPTV services itself. A valid subscription to an IPTV service using the Xtream API is required to use this tool.
-
-xtream2m3u does not endorse piracy and requires users to ensure they have the necessary rights and permissions. The developers are not responsible for any misuse of the software or violations of IPTV providers' terms of service.
+xtream2m3u is a tool for managing your own legal IPTV subscriptions. It **does not** provide any content, channels, or streams. The developers are not responsible for how this tool is used.
