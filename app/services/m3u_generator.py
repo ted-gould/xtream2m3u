@@ -196,6 +196,17 @@ def generate_m3u_playlist(
                 episodes_data = series_episodes_map.get(stream.get("series_id"))
 
                 if episodes_data:
+                    # Handle case where episodes_data is a list (some providers)
+                    if isinstance(episodes_data, list):
+                        episodes_dict = {}
+                        for ep in episodes_data:
+                            # Try to find season number, default to 1
+                            season = ep.get("season", 1)
+                            if season not in episodes_dict:
+                                episodes_dict[season] = []
+                            episodes_dict[season].append(ep)
+                        episodes_data = episodes_dict
+
                     # Sort seasons numerically if possible
                     try:
                         sorted_seasons = sorted(episodes_data.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 999)
