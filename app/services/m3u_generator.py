@@ -200,11 +200,21 @@ def generate_m3u_playlist(
                     if isinstance(episodes_data, list):
                         episodes_dict = {}
                         for ep in episodes_data:
-                            # Try to find season number, default to 1
-                            season = ep.get("season", 1)
-                            if season not in episodes_dict:
-                                episodes_dict[season] = []
-                            episodes_dict[season].append(ep)
+                            # Handle nested lists (some providers return list of lists)
+                            if isinstance(ep, list):
+                                for nested_ep in ep:
+                                    if not isinstance(nested_ep, dict):
+                                        continue
+                                    season = nested_ep.get("season", 1)
+                                    if season not in episodes_dict:
+                                        episodes_dict[season] = []
+                                    episodes_dict[season].append(nested_ep)
+                            elif isinstance(ep, dict):
+                                # Try to find season number, default to 1
+                                season = ep.get("season", 1)
+                                if season not in episodes_dict:
+                                    episodes_dict[season] = []
+                                episodes_dict[season].append(ep)
                         episodes_data = episodes_dict
 
                     # Sort seasons numerically if possible
