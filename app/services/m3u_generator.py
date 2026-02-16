@@ -240,10 +240,25 @@ def generate_m3u_playlist(
                             if not no_stream_proxy:
                                 ep_stream_url = f"{proxy_url}/stream-proxy/{encode_url(ep_stream_url)}"
 
+                            # Prepare episode tags
+                            episode_tags = tags.copy()
+                            if episode_added := episode.get("added"):
+                                episode_tags.append(f'added="{episode_added}"')
+
                             # Add to playlist
                             m3u_playlist += (
-                                f'#EXTINF:0 {" ".join(tags)},{full_title}\n'
+                                f'#EXTINF:0 {" ".join(episode_tags)},{full_title}\n'
                             )
+
+                            # Add file size if available
+                            if episode_size := episode.get("size"):
+                                try:
+                                    # Ensure size is an integer for EXTBYT
+                                    size_bytes = int(episode_size)
+                                    m3u_playlist += f"#EXTBYT:{size_bytes}\n"
+                                except (ValueError, TypeError):
+                                    pass
+
                             m3u_playlist += f"{ep_stream_url}\n"
 
                     # Continue to next stream as we've added all episodes
@@ -257,10 +272,24 @@ def generate_m3u_playlist(
             if not no_stream_proxy:
                 stream_url = f"{proxy_url}/stream-proxy/{encode_url(stream_url)}"
 
+            # Add added timestamp if available
+            if stream_added := stream.get("added"):
+                tags.append(f'added="{stream_added}"')
+
             # Add stream to playlist
             m3u_playlist += (
                 f'#EXTINF:0 {" ".join(tags)},{stream_name}\n'
             )
+
+            # Add file size if available (mostly for VOD)
+            if stream_size := stream.get("size"):
+                try:
+                    # Ensure size is an integer for EXTBYT
+                    size_bytes = int(stream_size)
+                    m3u_playlist += f"#EXTBYT:{size_bytes}\n"
+                except (ValueError, TypeError):
+                    pass
+
             m3u_playlist += f"{stream_url}\n"
 
     # Log included groups after filtering
